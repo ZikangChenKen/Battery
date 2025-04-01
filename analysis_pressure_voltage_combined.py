@@ -8,11 +8,11 @@ import os
 
 
 # WINDOW_SIZE = 1.0  
-Y_HOURS = 2.0     
+# Y_HOURS = 2.0     
 TEST_SIZE = 0.2     
 RANDOM_STATE = 42   
 
-def load_multimodal_data(root_path, WINDOW_SIZE):
+def load_multimodal_data(root_path, WINDOW_SIZE, Y_HOURS):
     failure_df = pd.read_csv(os.path.join(root_path, 'Battery_Failure_Time.csv'))
     failure_dict = dict(zip(failure_df['Test'], failure_df['Failure (hr)']))
     
@@ -106,53 +106,60 @@ def main():
     battery_path = r"C:\Users\chenz\OneDrive\桌面\Battery"
     
     window_sizes = [1.8, 1.5, 1.2, 1, 0.6, 0.5, 0.3, 0.1, 0.05, 0.01]
+    y_hours = [1, 2]
     
     results = []
     
-    for ws in window_sizes:
-        print(f"\n=== Current Window Size: {ws} h ===")
-        
-        features_df, clf_labels, reg_labels = load_multimodal_data(battery_path, ws)
-        
-        if len(features_df) == 0:
-            print(f"Window Size {ws} h: No valid Data")
-            continue
-        
-        features_df = features_df.fillna(features_df.mean())
-        
-        X_train, X_test, y_clf_train, y_clf_test, y_reg_train, y_reg_test = train_test_split(
-            features_df, clf_labels, reg_labels, 
-            test_size=TEST_SIZE, random_state=RANDOM_STATE
-        )
+    for Y_HOURS in y_hours:
+        for ws in window_sizes:
+            print(f"\n=== Current Y_HOURS: {Y_HOURS} h | Window Size: {ws} h ===")
+            
+            features_df, clf_labels, reg_labels = load_multimodal_data(battery_path, ws, Y_HOURS)
+            
+            if len(features_df) == 0:
+                print(f"No valid Data for Y_HOURS={Y_HOURS}h, Window={ws}h")
+                continue
+            
+            features_df = features_df.fillna(features_df.mean())
+            
+            X_train, X_test, y_clf_train, y_clf_test, y_reg_train, y_reg_test = train_test_split(
+                features_df, clf_labels, reg_labels, 
+                test_size=TEST_SIZE, random_state=RANDOM_STATE
+            )
 
-        clf = RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE)
-        clf.fit(X_train, y_clf_train)
-        clf_acc = accuracy_score(y_clf_test, clf.predict(X_test))
-        
-        reg_mask = (y_reg_train <= Y_HOURS)
-        reg = RandomForestRegressor(n_estimators=100, random_state=RANDOM_STATE)
-        reg.fit(X_train[reg_mask], y_reg_train[reg_mask])
-        reg_mse = mean_squared_error(y_reg_test, reg.predict(X_test))
-        
+            clf = RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE)
+            clf.fit(X_train, y_clf_train)
+            clf_acc = accuracy_score(y_clf_test, clf.predict(X_test))
+            
+            reg_mask = (y_reg_train <= Y_HOURS)
+            if sum(reg_mask) < 1: 
+                reg_mse = np.nan
+            else:
+                reg = RandomForestRegressor(n_estimators=100, random_state=RANDOM_STATE)
+                reg.fit(X_train[reg_mask], y_reg_train[reg_mask])
+                reg_mse = mean_squared_error(y_reg_test, reg.predict(X_test))
+            
+            results.append({
+                'y_hours': Y_HOURS,
+                'window_size': ws,
+                'accuracy': clf_acc,
+                'mse': reg_mse
+            })
+            
+            print(f"[Y={Y_HOURS}h][W={ws}h] Accuracy: {clf_acc:.4f} | MSE: {reg_mse if not np.isnan(reg_mse) else 'N/A'}")
 
-        results.append({
-            'window_size': ws,
-            'accuracy': clf_acc,
-            'mse': reg_mse
-        })
-        
-        print(f"Classification Accuracy: {clf_acc:.4f}")
-        print(f"Regression MSE: {reg_mse if not np.isnan(reg_mse) else 'N/A'}")
-    
-    print("\n\n=== Different Window Size Comparison ===")
-    print("{:<10} {:<12} {:<12}".format("Window Size (h)", "Classification Accuracy", "Regression MSE"))
-    for res in results:
-        mse = f"{res['mse']:.4f}" if not np.isnan(res['mse']) else "N/A"
-        print("{:<10.2f} {:<12.4f} {:<12}".format(
-            res['window_size'], 
-            res['accuracy'], 
-            mse
-        ))
+    print("\n\n=== Final Results (Grouped by Y_HOURS) ===")
+    for yh in y_hours:
+        print(f"\n--- Y_HOURS = {yh} hours ---")
+        print("{:<12} {:<12} {:<12}".format("Window(h)", "Accuracy", "MSE"))
+        yh_results = [r for r in results if r['y_hours'] == yh]
+        for res in yh_results:
+            mse = f"{res['mse']:.4f}" if not np.isnan(res['mse']) else "N/A    "
+            print("{:<12.2f} {:<12.4f} {:<12}".format(
+                res['window_size'],
+                res['accuracy'],
+                mse
+            ))
 
 if __name__ == "__main__":
     main()
