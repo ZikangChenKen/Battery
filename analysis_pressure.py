@@ -6,7 +6,7 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.metrics import accuracy_score, mean_squared_error
 import os
 
-WINDOW_SIZE = 1.0  
+WINDOW_SIZE = 0.5
 Y_HOURS = 2.0      
 TEST_SIZE = 0.2     
 RANDOM_STATE = 42   
