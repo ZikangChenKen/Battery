@@ -3,7 +3,7 @@ import numpy as np
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.metrics import accuracy_score, mean_squared_error
+from sklearn.metrics import accuracy_score, mean_squared_error, roc_auc_score
 import os
 
 
@@ -129,7 +129,13 @@ def main():
 
             clf = RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE)
             clf.fit(X_train, y_clf_train)
+            y_proba = clf.predict_proba(X_test)[:, 1]
             clf_acc = accuracy_score(y_clf_test, clf.predict(X_test))
+
+            if len(np.unique(y_clf_test)) < 2:
+                auc = np.nan
+            else:
+                auc = roc_auc_score(y_clf_test, y_proba)
             
             reg_mask = (y_reg_train <= Y_HOURS)
             if sum(reg_mask) < 1: 
@@ -143,21 +149,24 @@ def main():
                 'y_hours': Y_HOURS,
                 'window_size': ws,
                 'accuracy': clf_acc,
+                'auc': auc, 
                 'mse': reg_mse
             })
             
-            print(f"[Y={Y_HOURS}h][W={ws}h] Accuracy: {clf_acc:.4f} | MSE: {reg_mse if not np.isnan(reg_mse) else 'N/A'}")
+            print(f"[Y={Y_HOURS}h][W={ws}h] Accuracy: {clf_acc:.4f} | AUC: {auc:.4f} | MSE: {reg_mse if not np.isnan(reg_mse) else 'N/A'}")
 
     print("\n\n=== Final Results (Grouped by Y_HOURS) ===")
     for yh in y_hours:
         print(f"\n--- Y_HOURS = {yh} hours ---")
-        print("{:<12} {:<12} {:<12}".format("Window(h)", "Accuracy", "MSE"))
+        print("{:<12} {:<12} {:<12} {:<12}".format("Window(h)", "Accuracy", "AUC", "MSE"))
         yh_results = [r for r in results if r['y_hours'] == yh]
         for res in yh_results:
             mse = f"{res['mse']:.4f}" if not np.isnan(res['mse']) else "N/A    "
-            print("{:<12.2f} {:<12.4f} {:<12}".format(
+            auc = f"{res['auc']:.4f}" if not np.isnan(res['auc']) else "N/A    "
+            print("{:<12.2f} {:<12.4f} {:<12} {:<12}".format(
                 res['window_size'],
                 res['accuracy'],
+                auc,
                 mse
             ))
 
