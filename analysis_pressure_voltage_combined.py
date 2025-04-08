@@ -118,13 +118,13 @@ def compare_feature_distributions(group_0, group_1, features):
         
         comparison.append({
             'Feature': feat,
-            'Mean (Pred=0)': mean_0,
-            'Mean (Pred=1)': mean_1,
+            'Mean (True=0)': mean_0,
+            'Mean (True=1)': mean_1,
             'Mean Diff Ratio': mean_diff_ratio,
-            'Std (Pred=0)': std_0,
-            'Std (Pred=1)': std_1,
-            'Median (Pred=0)': median_0,
-            'Median (Pred=1)': median_1
+            'Std (True=0)': std_0,
+            'Std (True=1)': std_1,
+            'Median (True=0)': median_0,
+            'Median (True=1)': median_1
         })
     
     return pd.DataFrame(comparison)
@@ -133,13 +133,13 @@ def plot_feature_distribution(feat, group_0, group_1, save_path=None):
     plt.figure(figsize=(10, 6))
     
     plt.subplot(1, 2, 1)
-    sns.boxplot(x='clf_label_pred', y=feat, data=pd.concat([group_0, group_1]))
+    sns.boxplot(x='clf_label_true', y=feat, data=pd.concat([group_0, group_1]))
     plt.title(f'Boxplot of {feat}')
-    plt.xlabel('Predicted Label')
+    plt.xlabel('True Label')
     
     plt.subplot(1, 2, 2)
-    sns.kdeplot(group_0[feat], label='Pred=0', fill=True)
-    sns.kdeplot(group_1[feat], label='Pred=1', fill=True)
+    sns.kdeplot(group_0[feat], label='True=0', fill=True)
+    sns.kdeplot(group_1[feat], label='True=1', fill=True)
     plt.title(f'Density Plot of {feat}')
     plt.legend()
     
@@ -246,8 +246,8 @@ def main():
             full_df['clf_label_pred'] = clf.predict(features_df.values)
             full_df['reg_label_pred'] = reg.predict(features_df.values)
 
-            group_0 = full_df[full_df['clf_label_pred'] == 0]  
-            group_1 = full_df[full_df['clf_label_pred'] == 1] 
+            group_0 = full_df[full_df['clf_label_true'] == 0]  
+            group_1 = full_df[full_df['clf_label_true'] == 1] 
 
             label_columns = ['clf_label_true', 'reg_label_true', 
                 'clf_label_pred', 'reg_label_pred']
