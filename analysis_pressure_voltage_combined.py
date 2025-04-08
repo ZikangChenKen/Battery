@@ -5,6 +5,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.metrics import accuracy_score, mean_squared_error, roc_auc_score
 import os
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 # WINDOW_SIZE = 1.0  
@@ -102,8 +104,92 @@ def _extract_features(values, prefix):
     
     return features
 
+def compare_feature_distributions(group_0, group_1, features):
+    comparison = []
+    for feat in features:
+        mean_0 = group_0[feat].mean()
+        mean_1 = group_1[feat].mean()
+        std_0 = group_0[feat].std()
+        std_1 = group_1[feat].std()
+        median_0 = group_0[feat].median()
+        median_1 = group_1[feat].median()
+        
+        mean_diff_ratio = (mean_1 - mean_0) / (mean_0 + 1e-6)  # avoid division by zero
+        
+        comparison.append({
+            'Feature': feat,
+            'Mean (Pred=0)': mean_0,
+            'Mean (Pred=1)': mean_1,
+            'Mean Diff Ratio': mean_diff_ratio,
+            'Std (Pred=0)': std_0,
+            'Std (Pred=1)': std_1,
+            'Median (Pred=0)': median_0,
+            'Median (Pred=1)': median_1
+        })
+    
+    return pd.DataFrame(comparison)
+
+def plot_feature_distribution(feat, group_0, group_1, save_path=None):
+    plt.figure(figsize=(10, 6))
+    
+    plt.subplot(1, 2, 1)
+    sns.boxplot(x='clf_label_pred', y=feat, data=pd.concat([group_0, group_1]))
+    plt.title(f'Boxplot of {feat}')
+    plt.xlabel('Predicted Label')
+    
+    plt.subplot(1, 2, 2)
+    sns.kdeplot(group_0[feat], label='Pred=0', fill=True)
+    sns.kdeplot(group_1[feat], label='Pred=1', fill=True)
+    plt.title(f'Density Plot of {feat}')
+    plt.legend()
+    
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(os.path.join(save_path, f"{feat}_distribution.png"), bbox_inches='tight')
+    plt.close()
+
+def plot_results(results_df, Y_HOURS, ws, clf, reg, X_train, save_dir):
+    plt.figure(figsize=(15,10))
+    
+    plt.subplot(2,2,1)
+    sns.scatterplot(x='reg_label_true', y='reg_label_pred', data=results_df)
+    plt.plot([0, results_df['reg_label_true'].max()], [0, results_df['reg_label_true'].max()], 'r--')
+    plt.title(f'Regression Results (Y={Y_HOURS}h, W={ws}h)')
+    plt.xlabel('True Time Remaining')
+    plt.ylabel('Predicted Time Remaining')
+    
+    plt.subplot(2,2,2)
+    sns.countplot(x='clf_label_pred', hue='clf_label_true', data=results_df)
+    plt.title(f'Classification Distribution (Y={Y_HOURS}h, W={ws}h)')
+    
+    plt.subplot(2,2,3)
+    feature_importance = pd.Series(clf.feature_importances_, index=X_train.columns)
+    feature_importance.nlargest(10).plot(kind='barh')
+    plt.title('Top 10 Classification Features')
+    
+    plt.subplot(2,2,4)
+    feature_importance_reg = pd.Series(reg.feature_importances_, index=X_train.columns)
+    feature_importance_reg.nlargest(10).plot(kind='barh')
+    plt.title('Top 10 Regression Features')
+    
+    plt.tight_layout()
+    output_path = os.path.join(save_dir, f'results_Y{Y_HOURS}_W{ws}.png')
+    plt.savefig(output_path)
+    plt.close()
+    print(f"Saved results plot to {output_path}")
+
 def main():
     battery_path = r"C:\Users\chenz\OneDrive\桌面\Battery"
+
+    output_dirs = {
+        'full_data': os.path.join(battery_path, 'full_data'),
+        'feature_comp': os.path.join(battery_path, 'feature_comparison'),
+        'results': os.path.join(battery_path, 'results'),
+        'feat_dist': os.path.join(battery_path, 'feature_distributions')
+    }
+
+    for dir_path in output_dirs.values():
+        os.makedirs(dir_path, exist_ok=True)
     
     window_sizes = [1.8, 1.5, 1.2, 1, 0.6, 0.5, 0.3, 0.1, 0.05, 0.01]
     y_hours = [1, 2]
@@ -152,6 +238,50 @@ def main():
                 'auc': auc, 
                 'mse': reg_mse
             })
+
+            full_df = features_df.copy()
+            full_df['clf_label_true'] = clf_labels
+            full_df['reg_label_true'] = reg_labels
+            
+            full_df['clf_label_pred'] = clf.predict(features_df.values)
+            full_df['reg_label_pred'] = reg.predict(features_df.values)
+
+            group_0 = full_df[full_df['clf_label_pred'] == 0]  
+            group_1 = full_df[full_df['clf_label_pred'] == 1] 
+
+            label_columns = ['clf_label_true', 'reg_label_true', 
+                'clf_label_pred', 'reg_label_pred']
+            feature_columns = [col for col in full_df.columns if col not in label_columns]
+
+            comparison_df = compare_feature_distributions(group_0, group_1, feature_columns)
+            comp_csv_path = os.path.join(
+                output_dirs['feature_comp'],
+                f"feature_comparison_Y{Y_HOURS}_W{ws}.csv"
+            )
+            comparison_df.to_csv(comp_csv_path, index=False)
+            print(f"Saved feature comparison to {comp_csv_path}")
+
+            output_dir = os.path.join(
+                output_dirs['feat_dist'],
+                f"Y{Y_HOURS}_W{ws}"
+            )
+            os.makedirs(output_dir, exist_ok=True)
+
+            top_features = pd.Series(clf.feature_importances_, index=feature_columns)
+            top_features = top_features.nlargest(5).index.tolist()
+
+            for feat in top_features:
+                plot_feature_distribution(feat, group_0, group_1, output_dir)
+            print(f"Saved {len(top_features)} feature plots to {output_dir}")
+
+            output_csv = os.path.join(
+                output_dirs['full_data'], 
+                f"full_data_Y{Y_HOURS}_W{ws}.csv"
+            )
+            full_df.to_csv(output_csv, index=False)
+            print(f"Saved full data to {output_csv}")
+
+            plot_results(full_df, Y_HOURS, ws, clf, reg, X_train, save_dir=output_dirs['results'])
             
             print(f"[Y={Y_HOURS}h][W={ws}h] Accuracy: {clf_acc:.4f} | AUC: {auc:.4f} | MSE: {reg_mse if not np.isnan(reg_mse) else 'N/A'}")
 
