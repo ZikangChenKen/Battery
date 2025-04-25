@@ -7,6 +7,9 @@ from sklearn.metrics import accuracy_score, mean_squared_error, roc_auc_score, f
 import os
 import matplotlib.pyplot as plt
 import seaborn as sns
+import lightgbm as lgb
+from xgboost import XGBClassifier, XGBRegressor
+from sklearn.model_selection import cross_val_score
 
 
 # WINDOW_SIZE = 1.0  
@@ -217,7 +220,7 @@ def main():
         os.makedirs(dir_path, exist_ok=True)
     
     # parameters that could be changed 
-    window_sizes = [1.8, 1.5, 1.2, 1, 0.6, 0.5, 0.3, 0.1, 0.05, 0.01] # segmentation window size for feature extraction
+    window_sizes = [0.5, 0.3, 0.1, 0.05, 0.01] # segmentation window size for feature extraction
     y_hours = [1, 2] # classification labels for predicting failure
     
     results = []
@@ -239,7 +242,16 @@ def main():
                 test_size=TEST_SIZE, random_state=RANDOM_STATE
             )
 
-            clf = RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE)
+            clf = XGBClassifier(
+                n_estimators=200,
+                learning_rate=0.1,
+                max_depth=5,
+                subsample=0.8,
+                random_state=RANDOM_STATE
+            )
+            cv_scores = cross_val_score(clf, X_train, y_clf_train, cv=5)
+            print(f"Classification Cross-validation scores: {cv_scores}")
+
             clf.fit(X_train, y_clf_train)
             y_proba = clf.predict_proba(X_test)[:, 1]
             
@@ -257,7 +269,16 @@ def main():
             if sum(reg_mask) < 1: 
                 reg_mse = np.nan
             else:
-                reg = RandomForestRegressor(n_estimators=100, random_state=RANDOM_STATE)
+                reg = XGBRegressor(
+                    n_estimators=200,
+                    learning_rate=0.1,
+                    max_depth=5,
+                    subsample=0.8,
+                    random_state=RANDOM_STATE
+                )
+                reg_cv_scores = cross_val_score(reg, X_train[reg_mask], y_reg_train[reg_mask], 
+                               cv=3, scoring='neg_mean_squared_error')
+                print(f"Regression Cross-validation scores: {reg_cv_scores}")
                 reg.fit(X_train[reg_mask], y_reg_train[reg_mask])
                 reg_mse = mean_squared_error(y_reg_test, reg.predict(X_test))
             

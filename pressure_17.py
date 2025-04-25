@@ -3,22 +3,19 @@ import numpy as np
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.metrics import accuracy_score, mean_squared_error, roc_auc_score, f1_score
+from sklearn.metrics import accuracy_score, mean_squared_error, roc_auc_score
 import os
 import matplotlib.pyplot as plt
 import seaborn as sns
 
 
 # WINDOW_SIZE = 1.0  
-# Y_HOURS = 2.0
-
-# parameters that could be changed     
+# Y_HOURS = 2.0     
 TEST_SIZE = 0.2     
 RANDOM_STATE = 42   
 
-PRE_FAILURE_HOURS = 5   # hours before failure to consider for feature extraction
+PRE_FAILURE_HOURS = 4  
 
-# Function to load and process the data
 def load_multimodal_data(excel_path, WINDOW_SIZE, Y_HOURS):
     xls = pd.ExcelFile(excel_path)
     all_features = []
@@ -35,10 +32,11 @@ def load_multimodal_data(excel_path, WINDOW_SIZE, Y_HOURS):
             voltage_df.columns = ['time/h', '<Ewe>/V']
             pressure_df.columns = ['t(hr)', 'P']
             
-            failure_time = min(
-                voltage_df['time/h'].max(), 
-                pressure_df['t(hr)'].max()
-            )
+            pressure_over_17 = pressure_df[pressure_df['P'] >= 17]
+            if pressure_over_17.empty:
+                print(f"Skipping {sheet_name}: Pressure never reaches 17 psia")
+                continue
+            failure_time = pressure_over_17['t(hr)'].iloc[0]
             
             voltage_data = voltage_df[
                 (voltage_df['time/h'] >= (failure_time - PRE_FAILURE_HOURS)) &
@@ -101,7 +99,6 @@ def load_multimodal_data(excel_path, WINDOW_SIZE, Y_HOURS):
     
     return pd.DataFrame(all_features), np.array(all_clf_labels), np.array(all_reg_labels)
 
-# Function to extract features from the data
 def _extract_features(values, prefix):
     features = {}
     if len(values) == 0:
@@ -126,7 +123,6 @@ def _extract_features(values, prefix):
     
     return features
 
-# Function to compare feature distributions between two groups
 def compare_feature_distributions(group_0, group_1, features):
     comparison = []
     for feat in features:
@@ -152,7 +148,6 @@ def compare_feature_distributions(group_0, group_1, features):
     
     return pd.DataFrame(comparison)
 
-# Function to plot feature distributions
 def plot_feature_distribution(feat, group_0, group_1, save_path=None):
     plt.figure(figsize=(10, 6))
     
@@ -172,7 +167,6 @@ def plot_feature_distribution(feat, group_0, group_1, save_path=None):
         plt.savefig(os.path.join(save_path, f"{feat}_distribution.png"), bbox_inches='tight')
     plt.close()
 
-# Function to plot results (feature importance, accuracy, etc.)
 def plot_results(results_df, Y_HOURS, ws, clf, reg, X_train, save_dir):
     plt.figure(figsize=(15,10))
     
@@ -216,9 +210,8 @@ def main():
     for dir_path in output_dirs.values():
         os.makedirs(dir_path, exist_ok=True)
     
-    # parameters that could be changed 
-    window_sizes = [1.8, 1.5, 1.2, 1, 0.6, 0.5, 0.3, 0.1, 0.05, 0.01] # segmentation window size for feature extraction
-    y_hours = [1, 2] # classification labels for predicting failure
+    window_sizes = [1.8, 1.5, 1.2, 1, 0.6, 0.5, 0.3, 0.1, 0.05, 0.01]
+    y_hours = [1, 2]
     
     results = []
     
@@ -242,14 +235,10 @@ def main():
             clf = RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE)
             clf.fit(X_train, y_clf_train)
             y_proba = clf.predict_proba(X_test)[:, 1]
-            
-            y_clf_pred = clf.predict(X_test)
-            clf_acc = accuracy_score(y_clf_test, y_clf_pred)
-            clf_f1 = f1_score(y_clf_test, y_clf_pred)
+            clf_acc = accuracy_score(y_clf_test, clf.predict(X_test))
 
             if len(np.unique(y_clf_test)) < 2:
                 auc = np.nan
-                clf_f1 = np.nan
             else:
                 auc = roc_auc_score(y_clf_test, y_proba)
             
@@ -266,7 +255,6 @@ def main():
                 'window_size': ws,
                 'accuracy': clf_acc,
                 'auc': auc, 
-                'f1': clf_f1,
                 'mse': reg_mse
             })
 
@@ -326,18 +314,15 @@ def main():
     print("\n\n=== Final Results (Grouped by Y_HOURS) ===")
     for yh in y_hours:
         print(f"\n--- Y_HOURS = {yh} hours ---")
-        print("{:<12} {:<12} {:<12} {:<12} {:<12}".format( 
-            "Window(h)", "Accuracy", "AUC", "F1", "MSE"))  
+        print("{:<12} {:<12} {:<12} {:<12}".format("Window(h)", "Accuracy", "AUC", "MSE"))
         yh_results = [r for r in results if r['y_hours'] == yh]
         for res in yh_results:
             mse = f"{res['mse']:.4f}" if not np.isnan(res['mse']) else "N/A    "
             auc = f"{res['auc']:.4f}" if not np.isnan(res['auc']) else "N/A    "
-            f1 = f"{res['f1']:.4f}" if 'f1' in res else "N/A    " 
-            print("{:<12.2f} {:<12.4f} {:<12} {:<12} {:<12}".format(  
+            print("{:<12.2f} {:<12.4f} {:<12} {:<12}".format(
                 res['window_size'],
                 res['accuracy'],
                 auc,
-                f1,  
                 mse
             ))
 
