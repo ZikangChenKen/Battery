@@ -207,7 +207,8 @@ def plot_results(results_df, Y_HOURS, ws, clf, reg, X_train, save_dir):
     print(f"Saved results plot to {output_path}")
 
 def main():
-    excel_path = r"C:\Users\chenz\OneDrive\桌面\Battery\Down-selected tests.xlsx"
+    # excel_path = r"C:\Users\chenz\OneDrive\桌面\Battery\Down-selected tests.xlsx"
+    excel_path = r"C:\Users\chenz\Desktop\Battery\Tests 77-90.xlsx"
 
     output_dirs = {
         'full_data': os.path.join(os.path.dirname(excel_path), 'full_data'),
@@ -264,11 +265,8 @@ def main():
                 clf_f1 = np.nan
             else:
                 auc = roc_auc_score(y_clf_test, y_proba)
-            
-            reg_mask = (y_reg_train <= Y_HOURS)
-            if sum(reg_mask) < 1: 
-                reg_mse = np.nan
-            else:
+
+            try:
                 reg = XGBRegressor(
                     n_estimators=200,
                     learning_rate=0.1,
@@ -276,11 +274,12 @@ def main():
                     subsample=0.8,
                     random_state=RANDOM_STATE
                 )
-                reg_cv_scores = cross_val_score(reg, X_train[reg_mask], y_reg_train[reg_mask], 
-                               cv=3, scoring='neg_mean_squared_error')
-                print(f"Regression Cross-validation scores: {reg_cv_scores}")
-                reg.fit(X_train[reg_mask], y_reg_train[reg_mask])
+                # 使用全部训练数据
+                reg.fit(X_train, y_reg_train)
                 reg_mse = mean_squared_error(y_reg_test, reg.predict(X_test))
+            except Exception as e:
+                print(f"Regression failed: {str(e)}")
+                reg_mse = np.nan
             
             results.append({
                 'y_hours': Y_HOURS,

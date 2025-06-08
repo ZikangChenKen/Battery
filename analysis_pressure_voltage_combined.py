@@ -204,7 +204,8 @@ def plot_results(results_df, Y_HOURS, ws, clf, reg, X_train, save_dir):
     print(f"Saved results plot to {output_path}")
 
 def main():
-    excel_path = r"C:\Users\chenz\OneDrive\桌面\Battery\Down-selected tests.xlsx"
+    # excel_path = r"C:\Users\chenz\OneDrive\桌面\Battery\Down-selected tests.xlsx"
+    excel_path = r"C:\Users\chenz\Desktop\Battery\Tests 77-90.xlsx"
 
     output_dirs = {
         'full_data': os.path.join(os.path.dirname(excel_path), 'full_data'),
@@ -217,7 +218,7 @@ def main():
         os.makedirs(dir_path, exist_ok=True)
     
     # parameters that could be changed 
-    window_sizes = [1.8, 1.5, 1.2, 1, 0.6, 0.5, 0.3, 0.1, 0.05, 0.01] # segmentation window size for feature extraction
+    window_sizes = [0.5, 0.3, 0.1, 0.05, 0.01] # segmentation window size for feature extraction
     y_hours = [1, 2] # classification labels for predicting failure
     
     results = []
@@ -252,14 +253,15 @@ def main():
                 clf_f1 = np.nan
             else:
                 auc = roc_auc_score(y_clf_test, y_proba)
-            
-            reg_mask = (y_reg_train <= Y_HOURS)
-            if sum(reg_mask) < 1: 
+
+            reg = RandomForestRegressor(n_estimators=100, random_state=RANDOM_STATE)
+            try:
+                reg.fit(X_train, y_reg_train)
+                y_reg_pred = reg.predict(X_test)
+                reg_mse = mean_squared_error(y_reg_test, y_reg_pred)
+            except Exception as e:
+                print(f"Regression failed: {str(e)}")
                 reg_mse = np.nan
-            else:
-                reg = RandomForestRegressor(n_estimators=100, random_state=RANDOM_STATE)
-                reg.fit(X_train[reg_mask], y_reg_train[reg_mask])
-                reg_mse = mean_squared_error(y_reg_test, reg.predict(X_test))
             
             results.append({
                 'y_hours': Y_HOURS,

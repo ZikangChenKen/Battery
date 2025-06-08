@@ -158,7 +158,8 @@ def _extract_features(values, prefix):
 
 # Main Execution ---------------------------------------------------------------
 def main():
-    excel_path = r"C:\Users\chenz\OneDrive\桌面\Battery\Down-selected tests.xlsx"
+    # excel_path = r"C:\Users\chenz\OneDrive\桌面\Battery\Down-selected tests.xlsx"
+    excel_path = r"C:\Users\chenz\Desktop\Battery\Tests 77-90.xlsx"
     
     # 初始化输出目录（保持原有目录结构不变）
     output_dirs = {
@@ -203,13 +204,11 @@ def main():
             clf_acc = accuracy_score(y_clf_test, y_clf_pred)
             
             # 回归模型训练
-            reg_mask = (y_reg_train <= Y_HOURS)
-            reg_mse = np.nan
-            
-            if sum(reg_mask) > 1:
+            try:
                 reg_model = build_regressor(X_train.shape[1])
+                # 使用全部训练数据
                 reg_model.fit(
-                    X_train[reg_mask], y_reg_train[reg_mask],
+                    X_train, y_reg_train,
                     validation_split=0.2,
                     epochs=200,
                     batch_size=32,
@@ -218,6 +217,9 @@ def main():
                 )
                 y_reg_pred = reg_model.predict(X_test).flatten()
                 reg_mse = mean_squared_error(y_reg_test, y_reg_pred)
+            except Exception as e:
+                print(f"Regression failed: {str(e)}")
+                reg_mse = np.nan
             
             # 存储结果
             results.append({
